@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>User Profile</title>
+    <link rel="stylesheet" href="styles.css"> <!-- Lien vers votre feuille de style CSS -->
+</head>
+<body>
+    <div class="container">
+        <h1>User Profile</h1>
+        <div class="profile-info">
+            <div>
+                <label for="name">Name:</label>
+                <span id="name">John Doe</span>
+            </div>
+            <div>
+                <label for="email">Email:</label>
+                <span id="email">john@example.com</span>
+            </div>
+            <div>
+                <label for="age">Age:</label>
+                <span id="age">30</span>
+            </div>
+            <!-- Ajoutez d'autres informations de profil ici -->
+        </div>
+        <a href="edit_profile.html">Edit Profile</a> <!-- Lien vers la page d'édition de profil -->
+        <a href="logout.php">Logout</a> <!-- Lien pour se déconnecter -->
+    </div>
+</body>
+</html>

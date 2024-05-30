@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <link rel="stylesheet" href="login.css">
+</head>
+<body>
+    <div class="container">
+        <div class="screen">
+            <div class="screen__content">
+                <form class="login" id="loginForm" action="login.php" method="post">
+                    <div class="login__field">
+                        <img src="login.png" alt="" class="logo">
+                    </div>
+                    <div class="login__field">
+                        <img src="man.png" alt="">
+                        <input type="text" name="nom" class="login__input" placeholder="User name / Email">
+                    </div>
+                    <div class="login__field">
+                        <img src="padlock (2).png" alt="Password Icon">
+                        <input type="password" name="mdp" class="login__input" id="mdp" placeholder="Password">
+                        <button type="button"  class="password-toggle-btn" onclick="togglePasswordVisibility()">
+                            <img src="close-eye.png" alt="Show Password" id="eyeShowIcon">
+                            <img src="show.png" alt="Hide Password" id="eyeHideIcon" style="display:none;">
+                        </button>
+                    </div>
+                    
+                    <button type="submit" class="button login__submit">
+                        <span class="button__text">Log-in Now</span>
+                        <img src="enter.png" alt="">
+                    </button>
+                   
+
+                </form>
+                
+                <form id="signupForm" class="signup hidden" action="sign-up.php" method="post">
+                    
+                    <div class="signup__field">
+                        <img src="signup.png" alt="" class="logo">
+                    </div>
+                    <div class="signup__group">
+                        <input type="text" name="name" id="name" class="signup__input" placeholder="Enter your name" required>
+                        <input type="text" name="familyName" id="familyName" class="signup__input" placeholder="Enter your family name" required>
+                        <input type="password" name="password" id="password" class="signup__input" placeholder="Enter your password" required>
+                        <input type="password" name="confirmPassword" id="confirmPassword" class="signup__input" placeholder="Confirm your password" required>
+                        <input type="text" name="address" id="address" class="signup__input" placeholder="Enter your address" required>
+                        <input type="date" name="bd" id="bd" class="signup__input" placeholder="Enter your birthday" required>
+                        <input type="number" name="phoneNumber" id="phoneNumber" class="signup__input" placeholder="Enter your phone number" required>
+                        <input type="email" name="email" id="email" class="signup__input" placeholder="Enter your email" required>
+                        <select name="sex" id="sex" class="signup__input" required>
+                            <option value="homme">Homme</option>
+                            <option value="femme">Femme</option>
+                        </select>
+                        <select name="position" id="position" class="signup__input" required>
+                            <option value="chef">Chef de service</option>
+                            <option value="medecin">Medecin</option>
+                            <option value="infirmier">Infirmier</option>
+                            <option value="patient">Patient</option>
+                        </select>
+                    </div>
+                    <button type="submit" class="signup__submit">Sign Up</button>
+                </form>
+                
+                <!-- Lien pour basculer entre les formulaires -->
+                <div class="social-login">
+                    <a href="#" id="toggleForm" class="btnswitch">Sign-up</a>
+                </div>
+            </div>
+            <!-- Fond d'écran décoratif -->
+            <div class="screen__background">
+                <span class="screen__background__shape screen__background__shape4"></span>
+                <span class="screen__background__shape screen__background__shape3"></span>       
+                <span class="screen__background__shape screen__background__shape2"></span>
+                <span class="screen__background__shape screen__background__shape1"></span>
+            </div>      
+        </div>
+    </div>
+    <script src="login.js"></script>
+</body>
+</html>

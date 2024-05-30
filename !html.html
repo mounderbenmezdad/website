@@ -1,0 +1,2157 @@
+<?php
+session_start(); 
+$servername = "localhost";
+$username = "root";
+$password = "";
+$database = "memoire";
+
+// Vérifiez si l'utilisateur est connecté
+if (!isset($_SESSION['user'])) {
+    // Rediriger l'utilisateur vers la page de connexion s'il n'est pas connecté
+    header("Location: login.php");
+    exit;
+}
+$user_id = $_SESSION['user']['id'];
+$error_message = '';
+// Connexion à la base de données
+$conn = new mysqli($servername, $username, $password, $database);
+if ($conn->connect_error) {
+    die("La connexion à la base de données a échoué : " . $conn->connect_error);
+}
+$reciverid = isset($_POST['reciverid']) ? $_POST['reciverid'] : (isset($_GET['reciverid']) ? $_GET['reciverid'] : '');
+$recivername = isset($_POST['recivername']) ? $_POST['recivername'] : '';
+if (isset($_POST['envoyer']) && !empty($_POST['nouveau_message']) && !empty($reciverid)) {
+    $nouveau_message = $_POST['nouveau_message'];
+    $sql_insert = "INSERT INTO messages (sender, reciver, message) VALUES (?, ?, ?)";
+    $stmt = $conn->prepare($sql_insert);
+    if ($stmt === false) {
+        die("Erreur de préparation de la requête : " . $conn->error);
+    }
+    $stmt->bind_param("sss", $user_id, $reciverid, $nouveau_message);
+    if ($stmt->execute() === false) {
+        die("Erreur lors de l'exécution de la requête : " . $stmt->error);
+    }
+    $stmt->close();
+    header("Location: " . $_SERVER['PHP_SELF'] . "?medecinid=" . $medecinid);
+    exit;
+}
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['rendezvousbtn'])) {
+    $name = $_POST['namerdv'];
+    $email = $_POST['emailrdv'];
+    $contact_number = $_POST['numrdv'];
+    $appointment_for = $_POST['appointment_for'];
+    $appointment_description = $_POST['appointment_description'];
+    $date = $_POST['date'];
+    $time = $_POST['time'];
+    $datetime = $date . ' ' . $time;
+    $sql_insert = "INSERT INTO rendezvous (patientid,doctorid,date, sujet) VALUES (?,?,?,?)";
+    $stmt = $conn->prepare($sql_insert);
+    if ($stmt === false) {
+        die("Erreur de préparation de la requête : " . $conn->error);
+    }
+    $stmt->bind_param("ssss", $appointment_for, $user_id, $datetime, $appointment_description);
+    if ($stmt->execute() === false) {
+        die("Erreur lors de l'exécution de la requête : " . $stmt->error);
+    }
+    $stmt->close();
+    echo "Votre demande de rendez-vous a été soumise avec succès.";
+}
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $name = $conn->real_escape_string($_POST['name']);
+    $familyName = $conn->real_escape_string($_POST['familyName']);
+    $email = $conn->real_escape_string($_POST['email']);
+    $phoneNumber = $conn->real_escape_string($_POST['phoneNumber']);
+    $sex = $conn->real_escape_string($_POST['sex']);
+    $address = $conn->real_escape_string($_POST['address']);
+    
+    // Vérifiez si l'email est déjà pris par un autre utilisateur
+    $sql_check_email = "SELECT id FROM medecins WHERE email = ? AND id != ?";
+    $stmt_check_email = $conn->prepare($sql_check_email);
+    if ($stmt_check_email === false) {
+        die("Erreur de préparation de la requête : " . $conn->error);
+    }
+    $stmt_check_email->bind_param("ss", $email, $user_id);
+    $stmt_check_email->execute();
+    $stmt_check_email->store_result();
+
+    if ($stmt_check_email->num_rows > 0) {
+        // L'email est déjà utilisé par un autre utilisateur
+        $error_message = "L'email est déjà pris.";
+    } else {
+        // Vérifiez si le numéro de téléphone est déjà pris par un autre utilisateur
+        $sql_check_phone = "SELECT id FROM medecins WHERE phoneNumber = ? AND id != ?";
+        $stmt_check_phone = $conn->prepare($sql_check_phone);
+        if ($stmt_check_phone === false) {
+            die("Erreur de préparation de la requête : " . $conn->error);
+        }
+        $stmt_check_phone->bind_param("ss", $phoneNumber, $user_id);
+        $stmt_check_phone->execute();
+        $stmt_check_phone->store_result();
+
+        if ($stmt_check_phone->num_rows > 0) {
+            // Le numéro de téléphone est déjà utilisé par un autre utilisateur
+            $error_message = "Le numéro de téléphone est déjà pris.";
+        } else {
+            // Mise à jour des informations dans la base de données
+            $sql_update = "UPDATE medecins SET 
+                            name = ?, 
+                            familyName = ?, 
+                            email = ?, 
+                            phoneNumber = ?, 
+                            sex = ?, 
+                            address = ? 
+                            WHERE id = ?";
+
+            $stmt = $conn->prepare($sql_update);
+            if ($stmt === false) {
+                die("Erreur de préparation de la requête : " . $conn->error);
+            }
+            $stmt->bind_param("sssssss", $name, $familyName, $email, $phoneNumber, $sex, $address, $user_id);
+            if ($stmt->execute() === false) {
+                die("Erreur lors de l'exécution de la requête : " . $stmt->error);
+            }
+            $stmt->close();
+
+            // Mise à jour des informations de session
+            $_SESSION['user']['name'] = $name;
+            $_SESSION['user']['familyName'] = $familyName;
+            $_SESSION['user']['email'] = $email;
+            $_SESSION['user']['phoneNumber'] = $phoneNumber;
+            $_SESSION['user']['sex'] = $sex;
+            $_SESSION['user']['address'] = $address;
+
+            // Rediriger vers la page de profil ou afficher un message de succès
+            header("Location: medecin.php");
+            exit;
+        }
+        $stmt_check_phone->close();
+    }
+    $stmt_check_email->close();
+}
+
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <style>
+    body {
+      font-family: "Inter", sans-serif;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex; 
+      margin-left: 1%;
+      flex-direction: row;
+      align-items: center;
+      padding-top: 5vh;
+      padding-bottom: 5vh;
+      background-color: #f2f5f7;
+    }
+   .navbar{
+    margin-right: 10%;
+    margin-left: 1%;
+   }
+    .navbarsections { 
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      margin-left: 1%; 
+      margin-right: auto;
+      background-color: #05043e;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: .75rem;
+      border-radius: 10px;
+      box-shadow: 0 10px 50px 0 rgba(5, 4, 62, 0.25);
+    }
+
+    .navbarsection:nth-child(6) {
+      margin-top: 5rem; 
+      padding-top: 1.25rem;
+      border-top: 1px solid #363664;
+    }
+
+    .navbarsection + .navbarsection {
+      margin-top: .75rem;
+    }
+
+    .nav-link {
+      color: #FFF; 
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 3rem;
+      height: 3rem;
+      border-radius: 8px;
+      position: relative;
+    }
+
+    .nav-link:hover, .nav-link:focus, .nav-link.active {
+      background-color: #30305a;
+      outline: 0;
+    }
+
+    .nav-link:hover span, a:focus span, a.active span {
+      transform: scale(1);
+      opacity: 1;
+    }
+
+    .nav-link span {
+      position: absolute;
+      background-color: #30305a;
+      white-space: nowrap;
+      padding: .5rem 1rem;
+      border-radius: 6px;
+      left: calc(100% + 1.5rem);
+      transform-origin: center left;
+      transform: scale(0);
+      opacity: 0;
+      transition: .15s ease;
+    }
+
+    .section {
+      display: none;
+      background-color: transparent;
+    }
+
+    .section.active {
+      display: block;
+    }
+
+
+
+
+
+    .card {
+    flex: 0 1 calc(33.33% - 20px);
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 2px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+
+}
+.card-content {
+    text-align: center;
+}
+.card-content p {
+    margin: 10px 0;
+}
+.send-button{
+    background-color: red;
+    height: 10%;
+    width: 10%;
+}
+
+.card {
+    background: #fff;
+    transition: .5s;
+    border: 0;
+    margin-bottom: 30px;
+    border-radius: .55rem;
+    position: relative;
+    width: 100%;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 10%);
+}
+
+#body_header
+{
+
+	width:auto;
+	margin:0px auto;
+	text-align:center;
+	font-size:25px;
+}
+form {
+  max-width: 300px;
+  margin: 10px auto;
+  padding: 10px 20px;
+  background: #f4f7f8;
+  border-radius: 8px;
+}
+
+h1 {
+  margin: 0 0 30px 0;
+  text-align: center;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="date"],
+input[type="datetime"],
+input[type="email"],
+input[type="number"],
+input[type="search"],
+input[type="tel"],
+input[type="time"],
+input[type="url"],
+textarea,
+select {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  font-size: 16px;
+  height: auto;
+  margin: auto;
+  outline: 0;
+  padding: 8px;
+  width: 100%;
+  background-color: #e8eeef;
+  color: black;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.03) inset;
+  margin-bottom: 30px;
+}
+
+input[type="radio"],
+input[type="checkbox"]
+
+{
+  margin: 0 4px 8px 0;
+}
+
+select {
+  padding: 6px;
+  height: 32px;
+  border-radius: 2px;
+}
+
+button {
+  padding: 19px 39px 18px 39px;
+  color: #FFF;
+  background-color: #4bc970;
+  font-size: 18px;
+  text-align: center;
+  font-style: normal;
+  border-radius: 5px;
+  width: 100%;
+  border: 1px solid #3ac162;
+  border-width: 1px 1px 3px;
+  box-shadow: 0 -1px 0 rgba(255,255,255,0.1) inset;
+  margin-bottom: 10px;
+}
+
+fieldset {
+  margin-bottom: 30px;
+  border: none;
+}
+
+legend {
+  font-size: 1.4em;
+  margin-bottom: 10px;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+label.light {
+  font-weight: 300;
+  display: inline;
+}
+
+.number {
+  background-color: #5fcf80;
+  color: #fff;
+  height: 30px;
+  width: 30px;
+  display: inline-block;
+  font-size: 0.8em;
+  margin-right: 4px;
+  line-height: 30px;
+  text-align: center;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.2);
+  border-radius: 100%;
+}
+
+
+  form { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; }
+        label { display: block; margin-top: 10px; }
+        input, select, textarea { width: 100%; padding: 8px; margin-top: 5px; }
+        textarea { resize: vertical; }
+        .form-section { margin-bottom: 20px; }
+        .form-section h2 { margin-bottom: 10px; }
+
+  </style><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+  <div class="navbar">
+    <ul class="navbarsections">
+      <li class="navbarsection">
+        <a href="#home" class="nav-link">
+          <img src="home.png" alt="" class="ai-home">
+          <span>Home</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#patients" class="nav-link">
+          <img src="patient.png" alt="" class="ai-image">
+          <span>Mes patients</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#exams" class="nav-link">
+          <img src="exam.png" alt="" class="ai-file">
+          <span>Exams</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#messages" class="nav-link">
+          <img src="messages.png" alt="" class="ai-game-controller">
+          <span>Messages</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#rendez_vous" class="nav-link">
+          <img src="rendezvous.png" alt="" class="ai-book-open">
+          <span>Rendez-vous</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#notifications" class="nav-link">
+          <img src="man.png" alt="" class="ai-bell">
+          <span>Notifications</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#settings" class="nav-link">
+          <img src="man.png" alt="" class="ai-gear">
+          <span>Settings</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#profile" class="nav-link">
+          <img src="profilemedecin.png" alt="" class="ai-person">
+          <span>Profile</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+  <div id="home" class="section active">home</div>
+  <div id="patients" class="section">
+  <?php
+  $conn = new mysqli($servername, $username, $password, $database);
+  $mdc = $_SESSION['user']['id'];
+                if ($conn->connect_error) {
+                    die("La connexion à la base de données a échoué : " . $conn->connect_error);
+                }
+                $mespatients = "SELECT * FROM patient p JOIN dossiermedical dm ON p.id=dm.idpatient WHERE dm.idmedecin='$mdc'";
+                $resultmespatients = $conn->query($mespatients);
+                if ($resultmespatients->num_rows > 0) {
+                    while ($rowmespatients = $resultmespatients->fetch_assoc()) {
+                      echo "<li class='clearfix'>";
+                      echo "<img src='doctor.png' alt='avatar'>";
+                      echo "<span class='name'>" . htmlspecialchars($rowmespatients["name"]) . " " . htmlspecialchars($rowmespatients["familyName"]) . "</span>";
+                      echo "<form method='post'>";
+                      echo "<input type='hidden' name='reciverid' value='" . $rowmespatients["id"] . "'>";
+                      echo "<input type='hidden' name='recivername' value='" . $rowmespatients["name"] . "'>";
+                      echo "<button type='button' name='voirledossier' class='delete-button'>Voir le dossier</button>";
+                      echo "</form>";
+                      echo "</li>";
+                       } }
+    ?>
+  </div>
+  <div id="exams" class="section">exams</div>
+  <div id="messages" class="section">
+  <div class="row clearfix">
+        <div class="col-lg-12">
+            <div class="card chat-app">
+                <div id="plist" class="people-list">
+                    <ul class="contactlist">
+                    <?php
+                    $servername = "localhost";
+                    $username = "root";
+                    $password = "";
+                    $database = "memoire";
+        
+                    $conn = new mysqli($servername, $username, $password, $database);
+        
+                    // Vérification de la connexion
+                    if ($conn->connect_error) {
+                        die("La connexion à la base de données a échoué : " . $conn->connect_error);
+                    }
+                    $sqlchef = "SELECT id, name, familyName FROM chefservice";
+                    $resultchef = $conn->query($sqlchef);
+                    $sqlmdc = "SELECT id, name, familyName FROM medecins WHERE id!='$user_id'";
+                    $resultmdc = $conn->query($sqlmdc);
+                    $sqlinf = "SELECT id, name, familyName FROM infirmiers";
+                    $resultinf = $conn->query($sqlinf);
+                    $sqlpat = "SELECT id, name, familyName FROM patient";
+                    $resultpat = $conn->query($sqlpat);
+                    if ($resultmdc === false) {
+                        die("Erreur lors de la récupération des médecins : " . $conn->error);
+                    }
+                    if ($resultinf === false) {
+                      die("Erreur lors de la récupération des infirmiers : " . $conn->error);
+                  }
+                  if ($resultpat === false) {
+                    die("Erreur lors de la récupération des patients : " . $conn->error);
+                }
+                if ($resultchef === false) {
+                  die("Erreur lors de la récupération des médecins : " . $conn->error);
+              }
+echo"Chef service";
+if ($resultchef->num_rows > 0) {
+  while ($rowchef = $resultchef->fetch_assoc()) {
+      echo "<li class='clearfix'>";
+      echo "<img src='doctor.png' alt='avatar'>";
+      echo "<span class='name'>" . htmlspecialchars($rowchef["name"]) . " " . htmlspecialchars($rowchef["familyName"]) . "</span>";
+      echo "<form method='post'>";
+      echo "<input type='hidden' name='reciverid' value='" . $rowchef["id"] . "'>";
+      echo "<input type='hidden' name='recivername' value='" . $rowchef["name"] . "'>";
+      echo "<button type='submit' name='discuter' class='delete-button'>Discuter</button>";
+      echo "</form>";
+      echo "</li>";
+  }
+} else {
+  echo "<p>Chef service n'est pas trouvé.</p>";
+}
+
+                    if ($resultmdc->num_rows > 0) {
+                        while ($rowmdc = $resultmdc->fetch_assoc()) {
+                            echo "<li class='clearfix'>";
+                            echo "<img src='doctor.png' alt='avatar'>";
+                            echo "<span class='name'>" . htmlspecialchars($rowmdc["name"]) . " " . htmlspecialchars($rowmdc["familyName"]) . "</span>";
+                            echo "<form method='post'>";
+                            echo "<input type='hidden' name='reciverid' value='" . $rowmdc["id"] . "'>";
+                            echo "<input type='hidden' name='recivername' value='" . $rowmdc["name"] . "'>";
+                            echo "<button type='submit' name='discuter' class='delete-button'>Discuter</button>";
+                            echo "</form>";
+                            echo "</li>";
+                        }
+                    } else {
+                        echo "<p>Aucun médecin trouvé.</p>";
+                    }
+                    echo"Infirmiers";
+                    if ($resultinf->num_rows > 0) {
+                      while ($rowinf = $resultinf->fetch_assoc()) {
+                          echo "<li class='clearfix'>";
+                          echo "<img src='doctor.png' alt='avatar'>";
+                          echo "<span class='name'>" . htmlspecialchars($rowinf["name"]) . " " . htmlspecialchars($rowinf["familyName"]) . "</span>";
+                          echo "<form method='post'>";
+                          echo "<input type='hidden' name='reciverid' value='" . $rowinf["id"] . "'>";
+                          echo "<input type='hidden' name='recivername' value='" . $rowinf["name"] . "'>";
+                          echo "<button type='submit' name='discuter' class='delete-button'>Discuter</button>";
+                          echo "</form>";
+                          echo "</li>";
+                      }
+                  } else {
+                      echo "<p>Aucun infirmier trouvé.</p>";
+                  }
+                  echo"Patients";
+                    if ($resultpat->num_rows > 0) {
+                      while ($rowpat = $resultpat->fetch_assoc()) {
+                          echo "<li class='clearfix'>";
+                          echo "<img src='doctor.png' alt='avatar'>";
+                          echo "<span class='name'>" . htmlspecialchars($rowpat["name"]) . " " . htmlspecialchars($rowpat["familyName"]) . "</span>";
+                          echo "<form method='post'>";
+                          echo "<input type='hidden' name='reciverid' value='" . $rowpat["id"] . "'>";
+                          echo "<input type='hidden' name='recivername' value='" . $rowpat["name"] . "'>";
+                          echo "<button type='submit' name='discuter' class='delete-button'>Discuter</button>";
+                          echo "</form>";
+                          echo "</li>";
+                      }
+                  } else {
+                      echo "<p>Aucun infirmier trouvé.</p>";
+                  }
+                
+                    ?>
+                    </ul>
+                </div>
+                <div class="chat">
+                    <div class="chat-header clearfix">
+                        <div class="row">
+                            <div class="col-lg-6">
+                                <div class="chat-about">
+                                    <h1 class="m-b-0"><?php echo htmlspecialchars($recivername); ?></h1>
+                                    <small>Last seen: 2 hours ago</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-history">
+                        <ul class="m-b-0">
+                        <?php
+                        if (!empty($reciverid)) {
+                            $sql = "SELECT * FROM messages WHERE (sender = ? AND reciver = ?) OR (sender = ? AND reciver = ?) ORDER BY timestamp";
+                            $stmt = $conn->prepare($sql);
+                            if ($stmt === false) {
+                                die("Erreur de préparation de la requête : " . $conn->error);
+                            }
+                            $stmt->bind_param("ssss", $user_id, $reciverid, $reciverid, $user_id);
+                            if ($stmt->execute() === false) {
+                                die("Erreur lors de l'exécution de la requête : " . $stmt->error);
+                            }
+                            $result = $stmt->get_result();
+                            if ($result === false) {
+                                die("Erreur lors de la récupération des messages : " . $stmt->error);
+                            }
+                            while ($row = $result->fetch_assoc()) {
+                                $message_sender = $row["sender"];
+                                $message_content = htmlspecialchars($row["message"]);
+                                $messageclass = ($message_sender == $user_id) ? "message my-message" : "message other-message float-right";
+                                echo "<li class='clearfix'>";
+                                echo "<div class='$messageclass'>";
+                                echo "<span class='msgtime'>" . htmlspecialchars($row["timestamp"]) . "</span>";
+                                echo "<span class='message-content'>$message_content</span>";
+                                echo "</div>";
+                                echo "</li>";
+                            }
+                            $stmt->close();
+                        }
+                        ?>
+                        </ul>
+                    </div>
+                    <form class="chat-message clearfix" method="post">
+                        <input type="hidden" name="reciverid" value="<?php echo htmlspecialchars($reciverid); ?>">
+                        <textarea class="form-control" name="nouveau_message" placeholder="Entrez votre message ici..." required></textarea>
+                        <button type="submit" name="envoyer" class="delete-button">Envoyer</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<?php $conn->close(); ?>
+    </div>
+  </div>
+ <div id="rendez_vous" class="section">
+    <div id="body_header">
+        <!--This is a division tag for body header-->
+        <h1>Appointment Request Form</h1>
+    </div>
+    <form method="post">
+        <fieldset>
+            <legend><span class="number">1</span>Your basic details</legend>
+            <label for="name">Name :</label>
+            <input type="text" id="name" name="namerdv" placeholder="Your name" required pattern="[a-zA-Z0-9]+">
+            <label for="mail">Email</label>
+            <input type="email" id="mail" name="emailrdv" placeholder="abc@xyz.com" required>
+            <label for="tel">Contact Num:</label>
+            <input type="tel" id="tel" placeholder="Include country code" name="numrdv">
+        </fieldset>
+        <fieldset>
+            <legend><span class="number">2</span>Appointment Details</legend>
+            <label for="appointment_for">Appointment for:</label>
+            
+            <select id="appointment_for" name="appointment_for" required>
+                <?php
+                session_start();   
+                $servername = "localhost";
+                $username = "root";
+                $password = "";
+                $database = "memoire";
+                $conn = new mysqli($servername, $username, $password, $database);
+                $mdc = $_SESSION['user']['id'];
+                if ($conn->connect_error) {
+                    die("La connexion à la base de données a échoué : " . $conn->connect_error);
+                }
+                $sql = "SELECT * FROM patient p JOIN dossiermedical dm ON p.id=dm.idpatient WHERE dm.idmedecin='$mdc'";
+                $result = $conn->query($sql);
+                if ($result->num_rows > 0) {
+                    while ($row = $result->fetch_assoc()) {  
+                        $rdvmd = $row["id"];
+                        echo "<option value='$rdvmd'>" . $row["name"] . " " . $row["familyName"] . "</option>";     
+                    }
+                } else {
+                    echo "<li>There's no doctors.</li>";
+                }
+                $conn->close();
+                ?>
+            </select>
+            <label for="appointment_description">Appointment Description:</label>
+            <textarea id="appointment_description" name="appointment_description" placeholder="write here"></textarea>
+            <label for="date">Date:</label>
+            <input type="date" name="date" value="" required></input>
+            <br>
+            <label for="time">Time:</label>
+            <input type="time" name="time" value="" required></input>
+            <br>
+        </fieldset>
+        <button type="submit" name="rendezvousbtn">Request For Appointment</button>
+    </form>
+</div>
+
+  <div id="notifications" class="section">notifications</div>
+  <div id="settings" class="section">settings</div>
+  <div id="profile" class="section">
+    <div class="container">
+    <h2>Edit Profile</h2>
+    <div class="profile-info">
+        <img src="doctor.png" alt="Profile Picture">
+        <div>
+            <h3><?= htmlspecialchars($_SESSION['user']['name']) ?> <?= htmlspecialchars($_SESSION['user']['familyName']) ?></h3>
+            <p>Patient | Hope Care</p>
+            <p>Email: <?= htmlspecialchars($_SESSION['user']['email']) ?></p>
+        </div>
+    </div>
+    <div class="social-icons">
+        <a href="#"><i class="fab fa-whatsapp"></i></a>
+        <a href="#"><i class="fab fa-twitter"></i></a>
+        <a href="#"><i class="fab fa-facebook"></i></a>
+        <a href="#"><i class="fab fa-instagram"></i></a>
+    </div>
+    <?php if ($error_message): ?>
+        <p style="color: red;"><?= htmlspecialchars($error_message) ?></p>
+    <?php endif; ?>
+    <form class="edit-form" id="editForm" method="post">
+        <input type="text" name="name" placeholder="Full Name" id="fullName" value="<?= htmlspecialchars($_SESSION['user']['name']) ?>">
+        <input type="text" name="familyName" placeholder="Family Name" id="familyName" value="<?= htmlspecialchars($_SESSION['user']['familyName']) ?>">
+        <input type="text" name="email" placeholder="Email" id="email" value="<?= htmlspecialchars($_SESSION['user']['email']) ?>">
+        <input type="text" name="phoneNumber" placeholder="Phone" id="phone" value="<?= htmlspecialchars($_SESSION['user']['phoneNumber']) ?>">
+        <input type="text" name="sex" placeholder="Sex" id="sex" value="<?= htmlspecialchars($_SESSION['user']['sex']) ?>">
+        <input type="text" name="address" placeholder="Address" id="address" value="<?= htmlspecialchars($_SESSION['user']['address']) ?>">
+        <button type="submit">Save</button>
+    </form>
+</div>
+</body>
+
+  <script>
+    const editForm = document.getElementById('editForm');
+    editForm.addEventListener('submit', function(event) {
+        // Perform validation here if needed
+    });
+    document.addEventListener('DOMContentLoaded', () => {
+      const navLinks = document.querySelectorAll('.nav-link');
+      const sections = document.querySelectorAll('.section');
+
+      navLinks.forEach(link => {
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+
+          const targetSection = document.querySelector(link.getAttribute('href'));
+
+          sections.forEach(section => {
+            section.classList.remove('active');
+          });
+
+          navLinks.forEach(link => {
+            link.classList.remove('active');
+          });
+
+          link.classList.add('active');
+          targetSection.classList.add('active');
+        });
+      });
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+$selectQuery = "SELECT * FROM sallepatient WHERE id_salle='ATTEX1' ORDER BY id LIMIT 1";
+              $resulttour = $conn->query($selectQuery);
+if ($resulttour->num_rows > 0) {
+    $rowtour = $resulttour->fetch_assoc();
+    $firstPatientId = $rowtour['id'];
+    // Mettre à jour le champ salle_id du premier patient avec 'EXAM'
+    $updateQuery = "UPDATE sallepatient SET id_salle = 'EXAM' WHERE id = $firstPatientId";
+    if ($conn->query($updateQuery) === TRUE) {
+        echo "Le premier patient a été mis à jour avec succès.";
+    } else {
+        echo "Erreur lors de la mise à jour du premier patient : " . $conn->error;
+    }
+} else {
+    // Si la table est vide, insérer un nouveau patient avec salle_id = 'EXAM'
+    $insertQuery = "INSERT INTO sallepatient (id_salle, nombrepatients) VALUES ('EXAM', 0)";
+    if ($conn->query($insertQuery) === TRUE) {
+        echo "Nouveau patient inséré avec succès.";
+    } else {
+        echo "Erreur lors de l'insertion du nouveau patient : " . $conn->error;
+    }
+}
+
+
+
+
+
+
+
+
+
+
+
+<?php
+// Démarrez la session
+session_start();
+$servername = "localhost";
+$username = "root";
+$password = "";
+$database = "memoire";
+// Vérifiez si l'utilisateur est connecté
+if (!isset($_SESSION['user'])) {
+    // Rediriger l'utilisateur vers la page de connexion s'il n'est pas connecté
+    header("Location: login.php");
+    exit;
+}
+
+$user_id = $_SESSION['user']['id'];
+
+// Connexion à la base de données
+$conn = new mysqli($servername, $username, $password, $database);
+if ($conn->connect_error) {
+    die("La connexion à la base de données a échoué : " . $conn->connect_error);
+}
+
+// Déclaration de la variable pour le message d'erreur
+$error_message = '';
+
+// Traitement du formulaire de modification des informations
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    $name = $conn->real_escape_string($_POST['name']);
+    $familyName = $conn->real_escape_string($_POST['familyName']);
+    $email = $conn->real_escape_string($_POST['email']);
+    $phoneNumber = $conn->real_escape_string($_POST['phoneNumber']);
+    $sex = $conn->real_escape_string($_POST['sex']);
+    $address = $conn->real_escape_string($_POST['address']);
+    
+    // Vérifiez si l'email est déjà pris par un autre utilisateur
+    $sql_check_email = "SELECT id FROM patient WHERE email = ? AND id != ?";
+    $stmt_check_email = $conn->prepare($sql_check_email);
+    if ($stmt_check_email === false) {
+        die("Erreur de préparation de la requête : " . $conn->error);
+    }
+    $stmt_check_email->bind_param("ss", $email, $user_id);
+    $stmt_check_email->execute();
+    $stmt_check_email->store_result();
+
+    if ($stmt_check_email->num_rows > 0) {
+        // L'email est déjà utilisé par un autre utilisateur
+        $error_message = "L'email est déjà pris.";
+    } else {
+        // Vérifiez si le numéro de téléphone est déjà pris par un autre utilisateur
+        $sql_check_phone = "SELECT id FROM patient WHERE phoneNumber = ? AND id != ?";
+        $stmt_check_phone = $conn->prepare($sql_check_phone);
+        if ($stmt_check_phone === false) {
+            die("Erreur de préparation de la requête : " . $conn->error);
+        }
+        $stmt_check_phone->bind_param("ss", $phoneNumber, $user_id);
+        $stmt_check_phone->execute();
+        $stmt_check_phone->store_result();
+
+        if ($stmt_check_phone->num_rows > 0) {
+            // Le numéro de téléphone est déjà utilisé par un autre utilisateur
+            $error_message = "Le numéro de téléphone est déjà pris.";
+        } else {
+            // Mise à jour des informations dans la base de données
+            $sql_update = "UPDATE patient SET 
+                            name = ?, 
+                            familyName = ?, 
+                            email = ?, 
+                            phoneNumber = ?, 
+                            sex = ?, 
+                            address = ? 
+                            WHERE id = ?";
+
+            $stmt = $conn->prepare($sql_update);
+            if ($stmt === false) {
+                die("Erreur de préparation de la requête : " . $conn->error);
+            }
+            $stmt->bind_param("sssssss", $name, $familyName, $email, $phoneNumber, $sex, $address, $user_id);
+            if ($stmt->execute() === false) {
+                die("Erreur lors de l'exécution de la requête : " . $stmt->error);
+            }
+            $stmt->close();
+
+            // Mise à jour des informations de session
+            $_SESSION['user']['name'] = $name;
+            $_SESSION['user']['familyName'] = $familyName;
+            $_SESSION['user']['email'] = $email;
+            $_SESSION['user']['phoneNumber'] = $phoneNumber;
+            $_SESSION['user']['sex'] = $sex;
+            $_SESSION['user']['address'] = $address;
+
+            // Rediriger vers la page de profil ou afficher un message de succès
+            header("Location: patient.php");
+            exit;
+        }
+        $stmt_check_phone->close();
+    }
+    $stmt_check_email->close();
+}
+
+$conn->close();
+?>
+
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Profile Edit</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+<style>
+    * {
+        box-sizing: border-box;
+        margin: 0;
+        padding: 0;
+    }
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f0f0f0;
+    }
+    .container {
+        max-width: 800px;
+        margin: 20px auto;
+        padding: 20px;
+        background-color: #fff;
+        border-radius: 10px;
+        box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+    }
+    h2 {
+        margin-bottom: 20px;
+    }
+    .profile-info {
+        display: flex;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    .profile-info img {
+        width: 100px;
+        height: 100px;
+        border-radius: 50%;
+        margin-right: 20px;
+    }
+    .profile-info h3 {
+        margin-bottom: 5px;
+    }
+    .profile-info p {
+        color: #666;
+    }
+    .social-icons {
+        margin-bottom: 20px;
+    }
+    .social-icons a {
+        color: #333;
+        text-decoration: none;
+        margin-right: 10px;
+        font-size: 24px;
+        transition: color 0.3s;
+    }
+    .social-icons a:hover {
+        color: #007bff;
+    }
+    .edit-form input[type="text"] {
+        width: 100%;
+        padding: 10px;
+        margin-bottom: 10px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+        transition: border-color 0.3s;
+    }
+    .edit-form input[type="text"]:focus {
+        outline: none;
+        border-color: #007bff;
+    }
+    .edit-form button {
+        padding: 10px 20px;
+        background-color: #007bff;
+        color: #fff;
+        border: none;
+        border-radius: 5px;
+        cursor: pointer;
+        transition: background-color 0.3s;
+    }
+    .edit-form button:hover {
+        background-color: #0056b3;
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <h2>Edit Profile</h2>
+    <div class="profile-info">
+        <img src="doctor.png" alt="Profile Picture">
+        <div>
+            <h3><?= htmlspecialchars($_SESSION['user']['name']) ?> <?= htmlspecialchars($_SESSION['user']['familyName']) ?></h3>
+            <p>Patient | Hope Care</p>
+            <p>Email: <?= htmlspecialchars($_SESSION['user']['email']) ?></p>
+        </div>
+    </div>
+    <div class="social-icons">
+        <a href="#"><i class="fab fa-whatsapp"></i></a>
+        <a href="#"><i class="fab fa-twitter"></i></a>
+        <a href="#"><i class="fab fa-facebook"></i></a>
+        <a href="#"><i class="fab fa-instagram"></i></a>
+    </div>
+    <?php if ($error_message): ?>
+        <p style="color: red;"><?= htmlspecialchars($error_message) ?></p>
+    <?php endif; ?>
+    <form class="edit-form" id="editForm" method="post">
+        <input type="text" name="name" placeholder="Full Name" id="fullName" value="<?= htmlspecialchars($_SESSION['user']['name']) ?>">
+        <input type="text" name="familyName" placeholder="Family Name" id="familyName" value="<?= htmlspecialchars($_SESSION['user']['familyName']) ?>">
+        <input type="text" name="email" placeholder="Email" id="email" value="<?= htmlspecialchars($_SESSION['user']['email']) ?>">
+        <input type="text" name="phoneNumber" placeholder="Phone" id="phone" value="<?= htmlspecialchars($_SESSION['user']['phoneNumber']) ?>">
+        <input type="text" name="sex" placeholder="Sex" id="sex" value="<?= htmlspecialchars($_SESSION['user']['sex']) ?>">
+        <input type="text" name="address" placeholder="Address" id="address" value="<?= htmlspecialchars($_SESSION['user']['address']) ?>">
+        <button type="submit">Save</button>
+    </form>
+</div>
+<script>
+    const editForm = document.getElementById('editForm');
+    editForm.addEventListener('submit', function(event) {
+        // Perform validation here if needed
+    });
+</script>
+
+</body>
+</html>
+
+
+
+
+
+
+
+
+
+<?php
+session_start(); 
+$servername = "localhost";
+$username = "root";
+$password = "";
+$database = "memoire";
+
+// Vérifiez si l'utilisateur est connecté
+if (!isset($_SESSION['medecins'])) {
+  // Rediriger l'utilisateur vers la page de connexion s'il n'est pas connecté
+  header("Location: login.php");
+  exit(); // Terminer le script après la redirection
+}
+
+$medecin = $_SESSION['medecins']; // Accès aux données de l'utilisateur médecin
+$user_id = $medecin['id']; // ID du médecin
+
+$error_message = '';
+
+// Connexion à la base de données
+$conn = new mysqli($servername, $username, $password, $database);
+if ($conn->connect_error) {
+    die("La connexion à la base de données a échoué : " . $conn->connect_error);
+}
+
+function obtenirExamensPatient($servername, $username, $password, $database, $user_id) {
+  // Connexion à la base de données
+  $conn = new mysqli($servername, $username, $password, $database);
+
+  // Vérification de la connexion
+  if ($conn->connect_error) {
+      die("La connexion à la base de données a échoué : " . $conn->connect_error);
+  }
+
+  // Requête SQL pour récupérer les informations des patients
+  $exam = "SELECT p.id, p.name, p.familyName, p.bd, p.sex, p.address, p.phoneNumber FROM patient p JOIN patientsalle ps ON p.id = ps.id_patient WHERE ps.id_medecin = '$user_id' && ps.id_salle='EXAM'";
+  $resultexam = $conn->query($exam);
+  // Tableau pour stocker les informations des patients
+  $patients = array();
+  // Vérification du résultat de la requête
+  if ($resultexam->num_rows > 0) {
+      while ($rowexam = $resultexam->fetch_assoc()) {
+          $patients[] = array(
+              "id" => $rowexam["id"],
+              "name" => $rowexam["name"],
+              "familyName" => $rowexam["familyName"],
+              "birthday" => $rowexam["bd"],
+              "sex" => $rowexam["sex"],
+              "address" => $rowexam["address"],
+              "phoneNumber" => $rowexam["phoneNumber"]
+          );
+      }
+  }
+  else{$exam = "SELECT p.id, p.name, p.familyName, p.bd, p.sex, p.address, p.phoneNumber FROM patient p JOIN dossiermedical dm ON p.id = dm.idpatient LEFT JOIN FormulaireMedecin fm ON p.id = fm.IDPatient WHERE fm.DateExamen IS NOT NULL AND fm.DateExamen < DATE_SUB(NOW(), INTERVAL 3 MONTH)";
+     $resultexam = $conn->query($exam);
+    // Tableau pour stocker les informations des patients
+    $patients = array();
+    // Vérification du résultat de la requête
+    if ($resultexam->num_rows > 0) {
+        while ($rowexam = $resultexam->fetch_assoc()) {
+            $patients[] = array(
+                "id" => $rowexam["id"],
+                "name" => $rowexam["name"],
+                "familyName" => $rowexam["familyName"],
+                "birthday" => $rowexam["bd"],
+                "sex" => $rowexam["sex"],
+                "address" => $rowexam["address"],
+                "phoneNumber" => $rowexam["phoneNumber"]
+            );
+        }
+    }
+  }
+
+  // Fermeture de la connexion
+  $conn->close();
+  // Retourner les informations des patients
+  return $patients;
+}
+$patients = obtenirExamensPatient($servername, $username, $password, $database, $user_id);
+// Gestion de l'enregistrement d'un examen
+$patientidexam=isset($_POST['$malade']) ? $_POST['malade'] : (isset($_GET['malade']) ? $_GET['malade'] : '');
+$recivername = isset($_POST['recivername']) ? $_POST['recivername'] : (isset($_GET['recivername']) ? $_GET['recivername'] : '');
+$reciverid = isset($_POST['reciverid']) ? $_POST['reciverid'] : (isset($_GET['reciverid']) ? $_GET['reciverid'] : '');
+/// Insérer un nouveau message dans la base de données
+if (isset($_POST['envoyer']) && !empty($_POST['nouveau_message']) && !empty($reciverid)) {
+  $nouveau_message = $_POST['nouveau_message'];
+  $sql_insert = "INSERT INTO messages (sender, reciver, message) VALUES (?, ?, ?)";
+  $stmt = $conn->prepare($sql_insert);
+  if ($stmt === false) {
+      die("Erreur de préparation de la requête : " . $conn->error);
+  }
+  $stmt->bind_param("sss", $user_id, $reciverid, $nouveau_message);
+  if ($stmt->execute() === false) {
+      die("Erreur lors de l'exécution de la requête : " . $stmt->error);
+  }
+  $stmt->close();
+  // Redirigez vers la même page avec l'ancre #messages
+  header("Location: " . $_SERVER['PHP_SELF'] . "?medecinid=" . $user_id . "#messages");
+  exit;
+}
+
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['rendezvousbtn'])) {
+  $appointment_for = $_POST['appointment_for'];
+  $appointment_description = $_POST['appointment_description'];
+  $date = $_POST['date'];
+  $time = $_POST['time'];
+  $datetime = $date . ' ' . $time;
+
+  $sql_insert = "INSERT INTO rendezvous (doctorid,patientid, date, sujet, sender) VALUES (?, ?, ?, ?, ?)";
+  $stmt = $conn->prepare($sql_insert);
+  if ($stmt === false) {
+      $error_message = "Erreur de préparation de la requête : " . $conn->error;
+  } else {
+      $stmt->bind_param("sssss", $user_id, $appointment_for, $datetime, $appointment_description, $user_id);
+      if ($stmt->execute() === false) {
+          $error_message = "Erreur lors de l'exécution de la requête : " . $stmt->error;
+      } else {
+          $success_message = "Votre demande de rendez-vous a été soumise avec succès.";
+      }
+      $stmt->close();
+  }
+}
+
+if ($_SERVER["REQUEST_METHOD"] == "POST" && isset($_POST['enregistrerlexamen'])) {
+  // Récupérer les valeurs du formulaire
+  $idPatient = $_POST['malade'];
+  $nomMedecinTraitant = $medecin['name'];
+  $Poids = $_POST['poids'];
+  $Taille = $_POST['taille'];
+  $typeCancer = $_POST['typecancer'];
+  $stadeCancer = $_POST['stadecancer'];
+  $biomarqueursTumoraux = $_POST['biomarqueurstumoraux'];
+  $biopsie = $_POST['biopsie'];
+  $traitementsAnterieurs = $_POST['traitementsanterieurs'];
+  $traitementActuel = $_POST['traitementactuel'];
+  $effetsSecondaires = $_POST['effetssecondaires'];
+  $symptomes = $_POST['symptomes'];
+  $resultatsExamensMedicaux = $_POST['resultatsexamensmedicaux'];
+  $evaluationEtatGeneral = $_POST['evaluationetatgeneral'];
+  $planTraitementFutur = $_POST['plantraitementfutur'];
+  $recommandationsProchainRdv = $_POST['recommandationsprochainrdv'];
+
+  // Récupérer les données des médicaments
+  $medicamentNames = isset($_POST['medicamentName']) ? $_POST['medicamentName'] : array();
+  $dosages = isset($_POST['dosage']) ? $_POST['dosage'] : array();
+  $frequences = isset($_POST['frequence']) ? $_POST['frequence'] : array();
+  $durees = isset($_POST['duree']) ? $_POST['duree'] : array();
+  $effetSecondaire = isset($_POST['effetSecondaire']) ? $_POST['effetSecondaire'] : array();
+
+  // Assurer que les données des médicaments ont la même longueur pour obtenir le nombre de médicaments
+  $nombreMedicaments = count($medicamentNames);
+
+  // Connexion à la base de données
+  $conn = new mysqli($servername, $username, $password, $database);
+  // Vérification de la connexion
+  if ($conn->connect_error) {
+      die("La connexion à la base de données a échoué : " . $conn->connect_error);
+  }
+
+  // Préparation et exécution de l'insertion dans FormulaireMedecin
+  $stmt = $conn->prepare("INSERT INTO FormulaireMedecin (IDPatient, NomMedecinTraitant, TypeCancer, StadeCancer, BiomarqueursTumoraux, Biopsie, TraitementsAnterieurs, TraitementActuel, EffetsSecondaires, Symptomes, ResultatsExamensMedicaux, EvaluationEtatGeneral, PlanTraitementFutur, RecommandationsProchainRdv, poids, taille) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)");
+  if ($stmt === false) {
+      die("Erreur de préparation de la requête : " . $conn->error);
+  }
+
+  $stmt->bind_param("ssssssssssssssss", $idPatient, $nomMedecinTraitant, $typeCancer, $stadeCancer, $biomarqueursTumoraux, $biopsie, $traitementsAnterieurs, $traitementActuel, $effetsSecondaires, $symptomes, $resultatsExamensMedicaux, $evaluationEtatGeneral, $planTraitementFutur, $recommandationsProchainRdv, $Poids, $Taille);
+
+  if ($stmt->execute()) {
+      $examen_id = $conn->insert_id;
+      echo "Les informations ont été insérées avec succès dans la table FormulaireMedecin.";
+  } else {
+      echo "Erreur lors de l'insertion des informations dans la table FormulaireMedecin : " . $stmt->error;
+  }
+  $stmt->close();
+
+  // Mise à jour des valeurs des attributs antecedents et stade dans DossierMedical
+  $sql_update = "UPDATE dossiermedical SET antecedents = ?, stade = ? WHERE IDPatient = ?";
+  $stmt_update = $conn->prepare($sql_update);
+  if ($stmt_update === false) {
+      die("Erreur de préparation de la requête de mise à jour : " . $conn->error);
+  }
+  $stmt_update->bind_param("sss", $traitementsAnterieurs, $stadeCancer, $idPatient);
+  if ($stmt_update->execute()) {
+      echo "Les valeurs des attributs antecedents et stade ont été mises à jour avec succès dans la table DossierMedical.";
+  } else {
+      echo "Erreur lors de la mise à jour des valeurs des attributs antecedents et stade dans la table DossierMedical : " . $stmt_update->error;
+  }
+  $stmt_update->close();
+
+  // Insertion des médicaments
+  $stmtMedicament = $conn->prepare("INSERT INTO medicament (examen_id, medicamentName, dosage, frequence, duree, effetSecondaire) VALUES (?, ?, ?, ?, ?, ?)");
+  if ($stmtMedicament === false) {
+      die("Erreur de préparation de la requête pour les médicaments : " . $conn->error);
+  }
+
+  for ($i = 0; $i < $nombreMedicaments; $i++) {
+      // Liaison des paramètres pour les médicaments
+      $stmtMedicament->bind_param("isssss", $examen_id, $medicamentNames[$i], $dosages[$i], $frequences[$i], $durees[$i], $effetSecondaire[$i]);
+      if ($stmtMedicament->execute()) {
+          echo "Médicament " . ($i + 1) . " enregistré avec succès.<br>";
+      } else {
+          echo "Erreur lors de l'enregistrement du médicament " . ($i + 1) . " : " . $stmtMedicament->error . "<br>";
+      }
+  }
+  $stmtMedicament->close();
+
+  // Gestion de la mise à jour des salles
+  $selectQuery = "SELECT * FROM patientsalle WHERE id_salle='ATTEX1' ORDER BY id LIMIT 1";
+  $resulttour = $conn->query($selectQuery);
+  if ($resulttour->num_rows > 0) {
+      $rowtour = $resulttour->fetch_assoc();
+      $firstPatientId = $rowtour['id'];
+      $updateQuery = "UPDATE patientsalle SET id_salle = 'EXAM' WHERE id = ?";
+      $stmtUpdatePatient = $conn->prepare($updateQuery);
+      if ($stmtUpdatePatient === false) {
+          die("Erreur de préparation de la requête de mise à jour de la salle : " . $conn->error);
+      }
+      $stmtUpdatePatient->bind_param("i", $firstPatientId);
+      if ($stmtUpdatePatient->execute()) {
+          echo "Le premier patient a été mis à jour avec succès.";
+      } else {
+          echo "Erreur lors de la mise à jour du premier patient : " . $stmtUpdatePatient->error;
+      }
+      $stmtUpdatePatient->close();
+  } else {
+      $updateQuery = "UPDATE salles SET nbrpatients = 0 WHERE id = 'EXAM'";
+      if ($conn->query($updateQuery) === TRUE) {
+          echo "La salle est disponible";
+      } else {
+          echo "Erreur lors de la mise à jour de la salle : " . $conn->error;
+      }
+  }
+
+  $updateQuerysoin = "UPDATE patientsalle SET id_salle = 'S1' WHERE id_patient = ?";
+  $stmtUpdateSoin = $conn->prepare($updateQuerysoin);
+  if ($stmtUpdateSoin === false) {
+      die("Erreur de préparation de la requête de mise à jour de la salle de soins : " . $conn->error);
+  }
+  $stmtUpdateSoin->bind_param("s", $idPatient);
+  if ($stmtUpdateSoin->execute()) {
+      echo "Le patient est inséré à la salle des soins.";
+  } else {
+      echo "Erreur lors de l'insertion du patient à la salle des soins : " . $stmtUpdateSoin->error;
+  }
+  $stmtUpdateSoin->close();
+  
+}
+$conn->close();
+?>
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Document</title>
+  <style>
+    textarea {
+  width: 100%;
+  padding: 8px;
+  margin-top: 5px;
+  /* Ajustez la largeur selon vos préférences */
+  min-width: 200px;
+}
+
+    body {
+      font-family: "Inter", sans-serif;
+      line-height: 1.5;
+      min-height: 100vh;
+      display: flex; 
+      margin-left: 1%;
+      flex-direction: row;
+      align-items: center;
+      padding-top: 5vh;
+      padding-bottom: 5vh;
+      background-color: #f2f5f7;
+    }
+   .navbar{
+    margin-right: 10%;
+    margin-left: 1%;
+   }
+    .navbarsections { 
+      list-style: none;
+      margin: 0;
+      padding: 0;
+      margin-left: 1%; 
+      margin-right: auto;
+      background-color: #05043e;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      padding: .75rem;
+      border-radius: 10px;
+      box-shadow: 0 10px 50px 0 rgba(5, 4, 62, 0.25);
+    }
+
+    .navbarsection:nth-child(6) {
+      margin-top: 5rem; 
+      padding-top: 1.25rem;
+      border-top: 1px solid #363664;
+    }
+
+    .navbarsection + .navbarsection {
+      margin-top: .75rem;
+    }
+
+    .nav-link {
+      color: #FFF; 
+      text-decoration: none;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      width: 3rem;
+      height: 3rem;
+      border-radius: 8px;
+      position: relative;
+    }
+
+    .nav-link:hover, .nav-link:focus, .nav-link.active {
+      background-color: #30305a;
+      outline: 0;
+    }
+
+    .nav-link:hover span, a:focus span, a.active span {
+      transform: scale(1);
+      opacity: 1;
+    }
+
+    .nav-link span {
+      position: absolute;
+      background-color: #30305a;
+      white-space: nowrap;
+      padding: .5rem 1rem;
+      border-radius: 6px;
+      left: calc(100% + 1.5rem);
+      transform-origin: center left;
+      transform: scale(0);
+      opacity: 0;
+      transition: .15s ease;
+    }
+
+    .section {
+      display: none;
+      width: 100%;
+      background-color: transparent;
+    }
+
+    .section.active {
+      height: 50%;
+      width: 100%;
+      display: block;
+    }
+
+
+    .card {
+    flex: 0 1 calc(33.33% - 20px);
+    background-color: #fff;
+    border: 1px solid #ccc;
+    border-radius: 5px;
+    padding: 10px;
+    margin-bottom: 2px;
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+
+}
+.card-content {
+    text-align: center;
+}
+.card-content p {
+    margin: 10px 0;
+}
+.send-button{
+    background-color: red;
+    height: 10%;
+    width: 10%;
+}
+
+.card {
+    background: #fff;
+    transition: .5s;
+    border: 0;
+    margin-bottom: 30px;
+    border-radius: .55rem;
+    position: relative;
+    width: 100%;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 10%);
+}
+
+#body_header
+{
+
+	width:auto;
+	margin:0px auto;
+	text-align:center;
+	font-size:25px;
+}
+form {
+  max-width: 300px;
+  margin: 10px auto;
+  padding: 10px 20px;
+  background: #f4f7f8;
+  border-radius: 8px;
+}
+
+h1 {
+  margin: 0 0 30px 0;
+  text-align: center;
+}
+
+input[type="text"],
+input[type="password"],
+input[type="date"],
+input[type="datetime"],
+input[type="email"],
+input[type="number"],
+input[type="search"],
+input[type="tel"],
+input[type="time"],
+input[type="url"],
+textarea,
+select {
+  background: rgba(255,255,255,0.1);
+  border: none;
+  font-size: 16px;
+  height: auto;
+  margin: auto;
+  outline: 0;
+  padding: 8px;
+  width: 100%;
+  background-color: #e8eeef;
+  color: black;
+  box-shadow: 0 1px 0 rgba(0,0,0,0.03) inset;
+  margin-bottom: 30px;
+}
+
+input[type="radio"],
+input[type="checkbox"]
+
+{
+  margin: 0 4px 8px 0;
+}
+
+select {
+  padding: 6px;
+  height: 32px;
+  border-radius: 2px;
+}
+
+button {
+  padding: 19px 39px 18px 39px;
+  color: #FFF;
+  background-color: #4bc970;
+  font-size: 18px;
+  text-align: center;
+  font-style: normal;
+  border-radius: 5px;
+  width: 100%;
+  border: 1px solid #3ac162;
+  border-width: 1px 1px 3px;
+  box-shadow: 0 -1px 0 rgba(255,255,255,0.1) inset;
+  margin-bottom: 10px;
+}
+
+fieldset {
+  margin-bottom: 30px;
+  border: none;
+}
+
+legend {
+  font-size: 1.4em;
+  margin-bottom: 10px;
+}
+
+label {
+  display: block;
+  margin-bottom: 8px;
+}
+
+label.light {
+  font-weight: 300;
+  display: inline;
+}
+
+.number {
+  background-color: #5fcf80;
+  color: #fff;
+  height: 30px;
+  width: 30px;
+  display: inline-block;
+  font-size: 0.8em;
+  margin-right: 4px;
+  line-height: 30px;
+  text-align: center;
+  text-shadow: 0 1px 0 rgba(255,255,255,0.2);
+  border-radius: 100%;
+}
+
+
+  form { max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ccc; }
+        label { display: block; margin-top: 10px; }
+        input, select, textarea { width: 100%; padding: 8px; margin-top: 5px; }
+        textarea { resize: vertical; }
+        .form-section { margin-bottom: 20px; }
+        .form-section h2 { margin-bottom: 10px; }
+
+
+
+
+
+
+
+  
+        
+
+
+        /* Style de base pour la section de discussion */
+.chat-app {
+  display: flex;
+  flex-direction: row;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.chat-app .people-list {
+  flex: 1;
+  padding: 20px;
+  /* Ajout d'une hauteur fixe */
+  height: 650px; /* Ajustez la hauteur selon vos besoins */
+  overflow-y: auto; 
+}
+
+.chat-app .people-list ul {
+  list-style-type: none;
+  padding: 0;
+}
+
+.chat-app .people-list li {
+  padding: 10px 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.chat-app .people-list li img {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+}
+
+.chat-app .people-list li .name {
+  margin-left: 10px;
+}
+
+.chat-app .chat {
+  flex: 3;
+  display: flex;
+  flex-direction: column;
+  padding: 20px;
+  height: 650px;
+}
+
+.chat-app .chat .chat-history {
+  flex: 1;
+  overflow-y: auto;
+}
+
+.chat-app .chat .chat-history ul {
+  list-style-type: none;
+  padding: 0;
+  margin: 0;
+  
+}
+
+.chat-app .chat .chat-history li {
+  margin-bottom: 10px;
+}
+
+.chat-app .chat .chat-history .message {
+  display: inline-block;
+  max-width: 80%;
+  padding: 10px;
+  border-radius: 15px;
+  background-color: #f0f0f0;
+}
+
+.chat-app .chat .chat-history .my-message {
+  align-self: flex-end;
+  background-color: #3498db;
+  color: #fff;
+}
+
+.chat-app .chat .chat-history .message-content {
+  word-wrap: break-word;
+}
+
+.chat-app .chat .chat-message {
+  display: flex;
+  margin-top: 20px;
+}
+
+.chat-app .chat .chat-message textarea {
+  flex: 1;
+  padding: 10px;
+  border: 1px solid #ddd;
+  border-radius: 5px;
+  resize: none;
+}
+
+.chat-app .chat .chat-message button {
+  padding: 10px 20px;
+  margin-left: 10px;
+  background-color: #3498db;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+}
+
+
+  </style><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/5.15.4/css/all.min.css">
+</head>
+<body>
+  <div class="navbar">
+    <ul class="navbarsections">
+      <li class="navbarsection">
+        <a href="#home" class="nav-link">
+          <img src="home.png" alt="" class="ai-home">
+          <span>Home</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#patients" class="nav-link">
+          <img src="patient.png" alt="" class="ai-image">
+          <span>Mes patients</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#examen" class="nav-link">
+          <img src="exam.png" alt="" class="ai-file">
+          <span>Exams</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#messages" class="nav-link">
+          <img src="messages.png" alt="" class="ai-game-controller">
+          <span>Messages</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#rendez_vous" class="nav-link">
+          <img src="rendezvous.png" alt="" class="ai-book-open">
+          <span>Rendez-vous</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#notifications" class="nav-link">
+          <img src="man.png" alt="" class="ai-bell">
+          <span>Notifications</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#settings" class="nav-link">
+          <img src="man.png" alt="" class="ai-gear">
+          <span>Settings</span>
+        </a>
+      </li>
+      <li class="navbarsection">
+        <a href="#profile" class="nav-link">
+          <img src="profilemedecin.png" alt="" class="ai-person">
+          <span>Profile</span>
+        </a>
+      </li>
+    </ul>
+  </div>
+  <div id="home" class="section active">home</div>
+  <div id="patients" class="section">
+  <?php
+  $conn = new mysqli($servername, $username, $password, $database);
+  $mdc = $medecin['id'];
+                if ($conn->connect_error) {
+                    die("La connexion à la base de données a échoué : " . $conn->connect_error);
+                }
+                $mespatients = "SELECT * FROM patient p JOIN dossiermedical dm ON p.id=dm.idpatient WHERE dm.idmedecin='$mdc'";
+                $resultmespatients = $conn->query($mespatients);
+                if ($resultmespatients->num_rows > 0) {
+                    while ($rowmespatients = $resultmespatients->fetch_assoc()) {
+                      echo "<li class='listeusers'>";
+                      echo "<img src='doctor.png' alt='avatar'>";
+                      echo "<span class='name'>" . htmlspecialchars($rowmespatients["name"]) . " " . htmlspecialchars($rowmespatients["familyName"]) . "</span>";
+                      echo "<form method='post'>";
+                      echo "<input type='hidden' name='monpatientid' value='" . $rowmespatients["id"] . "'>";
+                      echo "<input type='hidden' name='monpatientname' value='" . $rowmespatients["name"] . "'>";
+                      echo "<button type='button' name='voirledossier' class='delete-button'>Voir le dossier</button>";
+                      echo "</form>";
+                      echo "</li>";
+                       } }
+    ?>
+  </div>
+<div id="examen" class="section">
+  <form method="POST">
+    <label>
+      <select name="malade" id="malade" >
+        <?php
+        session_start();   
+        $servername = "localhost";
+        $username = "root";
+        $password = "";
+        $database = "memoire";
+        $conn = new mysqli($servername, $username, $password, $database);
+        if ($conn->connect_error) {
+            die("La connexion à la base de données a échoué : " . $conn->connect_error);
+        }
+        if (!empty($patients)){
+        foreach ($patients as $patient){   
+                            $patientidexam=$patient['id'];
+                            echo "<option value='$patientidexam'>" . $patient["name"] . " " . $patient["familyName"] . "</option>";  
+                          }
+        }
+        else{
+          echo"There is no exams";
+        }
+        ?>             
+      </select>
+      <div>
+                <label for="typecancer">Type de Cancer</label>
+                <select id="typetancer" name="typecancer" required>
+                    <option value="">Sélectionnez un type de cancer</option>
+                    <option value="Cancer du sein">Cancer du sein</option>
+                    <option value="Cancer du poumon">Cancer du poumon</option>
+                    <option value="Cancer de la prostate">Cancer de la prostate</option>
+                    <option value="Cancer colorectal">Cancer colorectal</option>
+                    <option value="Cancer de la peau">Cancer de la peau</option>
+                    <option value="Leucémie">Leucémie</option>
+                    <option value="Lymphome">Lymphome</option>
+                    <!-- Ajoutez d'autres types de cancer ici -->
+                </select>
+        </div>
+        <div>
+                <label for="stadecancer">Stade du Cancer</label>
+                <select id="stadecancer" name="stadecancer" required>
+                    <option value="">Sélectionnez un stade</option>
+                    <option value="Stade I">Stade I</option>
+                    <option value="Stade II">Stade II</option>
+                    <option value="Stade III">Stade III</option>
+                    <option value="Stade IV">Stade IV</option>
+                    <!-- Ajoutez d'autres stades si nécessaire -->
+                </select>
+                <label for="biomarqueurstumoraux">Biomarqueurs Tumoraux</label>
+                <textarea id="biomarqueurstumoraux" name="biomarqueurstumoraux" rows="3"></textarea>
+                <label for="biopsie">Biopsie</label>
+                <textarea id="biopsie" name="biopsie" rows="3"></textarea>
+                <label for="traitementsanterieurs">Traitements Antérieurs</label>
+                <textarea id="traitementsanterieurs" name="traitementsanterieurs" rows="3"></textarea>
+                <label for="traitementactuel">Traitement Actuel</label>
+                <textarea id="traitementactuel" name="traitementactuel" rows="3"></textarea>
+                <label for="effetssecondaires">Effets Secondaires</label>
+                <textarea id="effetssecondaires" name="effetssecondaires" rows="3"></textarea>
+                <label for="symptomes">Symptômes</label>
+                <textarea id="symptomes" name="symptomes" rows="3"></textarea>
+                <label for="resultatsexamensmedicaux">Résultats des Examens Médicaux</label>
+                <textarea id="resultatsexamensmedicaux" name="resultatsexamensmedicaux" rows="3"></textarea>
+                <label for="evaluationetatgeneral">Évaluation de l'État Général</label>
+                <textarea id="evaluationetatgeneral" name="evaluationetatgeneral" rows="3"></textarea>
+                <label for="plantraitementfutur">Plan de Traitement Futur</label>
+                <textarea id="plantraitementfutur" name="plantraitementfutur" rows="3"></textarea>
+                <label for="recommandationsprochainrdv">Recommandations pour le Prochain Rendez-vous</label>
+                <textarea id="recommandationsprochainrdv" name="recommandationsprochainrdv" rows="3"></textarea>
+                <label for="poids">Poids (kg)</label>
+                <input type="number" id="poids" name="poids" required>
+                <label for="taille">Taille (cm)</label>
+                <input type="number" id="taille" name="taille" required>
+            <h2>Informations Médicaments</h2>
+                  <div id="medicaments">
+                    <div class="medicament">
+                      <label for="medicamentName">Nom du médicament :</label>
+                      <input type="text" name="medicamentName[]" required>
+                      <label for="dosage">Dosage :</label>
+                      <input type="text" name="dosage[]" required>
+                      <label for="frequence">Fréquence :</label>
+                      <input type="text" name="frequence[]" required>
+                      <label for="duree">Durée (jours) :</label>
+                      <input type="number" name="duree[]" required>
+                      <label for="remarques">Remarques :</label>
+                      <input type="text" name="effetSecondaire[]">
+                    </div>
+                  </div>
+                  <button type="button" onclick="ajouterMedicament()">Ajouter un médicament</button>
+                <input type="submit" name="enregistrerlexamen" value="Enregistrer le diagnostic">
+            </div>
+          </form>
+      </div>
+  <div id="messages" class="section">
+  <div class="row clearf">
+        <div class="col-lg-12">
+            <div class="card chat-app">
+                <div id="plist" class="people-list">
+                    <ul class="contactlist">
+                    <?php
+                    $servername = "localhost";
+                    $username = "root";
+                    $password = "";
+                    $database = "memoire";
+        
+                    $conn = new mysqli($servername, $username, $password, $database);
+        
+                    // Vérification de la connexion
+                    if ($conn->connect_error) {
+                        die("La connexion à la base de données a échoué : " . $conn->connect_error);
+                    }
+                    $sqlchef = "SELECT id, name, familyName FROM chefservice";
+                    $resultchef = $conn->query($sqlchef);
+                    $sqlmdc = "SELECT id, name, familyName FROM medecins WHERE id!='$user_id'";
+                    $resultmdc = $conn->query($sqlmdc);
+                    $sqlinf = "SELECT id, name, familyName FROM infirmiers";
+                    $resultinf = $conn->query($sqlinf);
+                    $sqlpat = "SELECT id, name, familyName FROM patient";
+                    $resultpat = $conn->query($sqlpat);
+                    if ($resultmdc === false) {
+                        die("Erreur lors de la récupération des médecins : " . $conn->error);
+                    }
+                    if ($resultinf === false) {
+                      die("Erreur lors de la récupération des infirmiers : " . $conn->error);
+                  }
+                  if ($resultpat === false) {
+                    die("Erreur lors de la récupération des patients : " . $conn->error);
+                }
+                if ($resultchef === false) {
+                  die("Erreur lors de la récupération des médecins : " . $conn->error);
+              }
+echo"Chef service";
+if ($resultchef->num_rows > 0) {
+  while ($rowchef = $resultchef->fetch_assoc()) {
+      echo "<li class='clearfix'>";
+      echo "<img src='doctor.png' alt='avatar'>";
+      echo "<span class='name'>" . htmlspecialchars($rowchef["name"]) . " " . htmlspecialchars($rowchef["familyName"]) . "</span>";
+      echo "<form method='post' action='".$_SERVER['PHP_SELF']."#messages'>";
+      echo "<input type='hidden' name='reciverid' value='" . $rowchef["id"] . "'>";
+      echo "<input type='hidden' name='recivername' value='" . $rowchef["name"] . "'>";
+      echo "<button type='submit' name='discuter' class='delete-button'>Discuter</button>";
+      echo "</form>";
+      echo "</li>";
+  }
+} else {
+  echo "<p>Chef service n'est pas trouvé.</p>";
+}
+
+                    if ($resultmdc->num_rows > 0) {
+                        while ($rowmdc = $resultmdc->fetch_assoc()) {
+                            echo "<li class='clearfix'>";
+                            echo "<img src='doctor.png' alt='avatar'>";
+                            echo "<span class='name'>" . htmlspecialchars($rowmdc["name"]) . " " . htmlspecialchars($rowmdc["familyName"]) . "</span>";
+                            echo "<form method='post' action='".$_SERVER['PHP_SELF']."#messages'>";
+                            echo "<input type='hidden' name='reciverid' value='" . $rowmdc["id"] . "'>";
+                            echo "<input type='hidden' name='recivername' value='" . $rowmdc["name"] . "'>";
+                            echo "<button type='submit' name='discuter' class='delete-button'>Discuter</button>";
+                            echo "</form>";
+                            echo "</li>";
+                        }
+                    } else {
+                        echo "<p>Aucun médecin trouvé.</p>";
+                    }
+                    echo"Infirmiers";
+                    if ($resultinf->num_rows > 0) {
+                      while ($rowinf = $resultinf->fetch_assoc()) {
+                          echo "<li class='clearfix'>";
+                          echo "<img src='doctor.png' alt='avatar'>";
+                          echo "<span class='name'>" . htmlspecialchars($rowinf["name"]) . " " . htmlspecialchars($rowinf["familyName"]) . "</span>";
+                          echo "<form method='post' action='".$_SERVER['PHP_SELF']."#messages'>";
+                          echo "<input type='hidden' name='reciverid' value='" . $rowinf["id"] . "'>";
+                          echo "<input type='hidden' name='recivername' value='" . $rowinf["name"] . "'>";
+                          echo "<button type='submit' name='discuter' class='delete-button'>Discuter</button>";
+                          echo "</form>";
+                          echo "</li>";
+                      }
+                  } else {
+                      echo "<p>Aucun infirmier trouvé.</p>";
+                  }
+                  echo"Patients";
+                    if ($resultpat->num_rows > 0) {
+                      while ($rowpat = $resultpat->fetch_assoc()) {
+                          echo "<li class='clearfix'>";
+                          echo "<img src='doctor.png' alt='avatar'>";
+                          echo "<span class='name'>" . htmlspecialchars($rowpat["name"]) . " " . htmlspecialchars($rowpat["familyName"]) . "</span>";
+                          echo "<form method='post' action='".$_SERVER['PHP_SELF']."#messages'>";
+                          echo "<input type='hidden' name='reciverid' value='" . $rowpat["id"] . "'>";
+                          echo "<input type='hidden' name='recivername' value='" . $rowpat["name"] . "'>";
+                          echo "<button type='submit' name='discuter' class='delete-button'>Discuter</button>";
+                          echo "</form>";
+                          echo "</li>";
+                      }
+                  } else {
+                      echo "<p>Aucun infirmier trouvé.</p>";
+                  }
+                
+                    ?>
+                    </ul>
+                </div>
+                <div class="chat">
+                    <div class="chat-header clearfix">
+                        <div class="row">
+                            <div class="col-lg-6">
+                                <div class="chat-about">
+                                    <h1 class="m-b-0"><?php echo htmlspecialchars($recivername); ?></h1>
+                                    <small>Last seen: 2 hours ago</small>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="chat-history">
+                        <ul class="m-b-0">
+                        <?php
+                        if (!empty($reciverid)) {
+                            $sql = "SELECT * FROM messages WHERE (sender = ? AND reciver = ?) OR (sender = ? AND reciver = ?) ORDER BY timestamp";
+                            $stmt = $conn->prepare($sql);
+                            if ($stmt === false) {
+                                die("Erreur de préparation de la requête : " . $conn->error);
+                            }
+                            $stmt->bind_param("ssss", $user_id, $reciverid, $reciverid, $user_id);
+                            if ($stmt->execute() === false) {
+                                die("Erreur lors de l'exécution de la requête : " . $stmt->error);
+                            }
+                            $result = $stmt->get_result();
+                            if ($result === false) {
+                                die("Erreur lors de la récupération des messages : " . $stmt->error);
+                            }
+                            while ($row = $result->fetch_assoc()) {
+                                $message_sender = $row["sender"];
+                                $message_content = htmlspecialchars($row["message"]);
+                                $messageclass = ($message_sender == $user_id) ? "message my-message" : "message other-message float-right";
+                                echo "<li class='clearfix'>";
+                                echo "<div class='$messageclass'>";
+                                echo "<span class='msgtime'>" . htmlspecialchars($row["timestamp"]) . "</span>";
+                                echo "<span class='message-content'>$message_content</span>";
+                                echo "</div>";
+                                echo "</li>";
+                            }
+                            $stmt->close();
+                        }
+                        ?>
+                        </ul>
+                    </div>
+                    <form id="chat-form"class="chat-message clearfix" method="post" action="<?php echo $_SERVER['PHP_SELF']; ?>#messages" >
+                        <input type="hidden" name="reciverid" value="<?php echo htmlspecialchars($reciverid); ?>">
+                        <textarea class="form-control" name="nouveau_message" placeholder="Entrez votre message ici..." required></textarea>
+                        <button type="submit" id="envoyerButton"name="envoyer" class="delete-button">Envoyer</button>
+                    </form>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+<?php $conn->close(); ?>
+    </div>
+  </div>
+ <div id="rendez_vous" class="section">
+    <div id="body_header">
+        <!--This is a division tag for body header-->
+        <h1>Appointment Request Form</h1>
+    </div>
+    <form method="post">
+        <fieldset>
+            <legend><span class="number">1</span>Your basic details</legend>
+            <label for="name">Name :</label>
+            <input type="text" id="name" name="namerdv" placeholder="Your name" required pattern="[a-zA-Z0-9]+">
+            <label for="mail">Email</label>
+            <input type="email" id="mail" name="emailrdv" placeholder="abc@xyz.com" required>
+            <label for="tel">Contact Num:</label>
+            <input type="tel" id="tel" placeholder="Include country code" name="numrdv">
+        </fieldset>
+        <fieldset>
+            <legend><span class="number">2</span>Appointment Details</legend>
+            <label for="appointment_for">Appointment for:</label>
+            
+            <select id="$appointment_for" name="appointment_for" required>
+                <?php
+                session_start();   
+                $servername = "localhost";
+                $username = "root";
+                $password = "";
+                $database = "memoire";
+                $conn = new mysqli($servername, $username, $password, $database);
+                $mdc = $medecin['id'];
+                if ($conn->connect_error) {
+                    die("La connexion à la base de données a échoué : " . $conn->connect_error);
+                }
+                $sql = "SELECT * FROM patient p JOIN dossiermedical dm ON p.id=dm.idpatient WHERE dm.idmedecin='$mdc'";
+                $result = $conn->query($sql);
+                if ($result->num_rows > 0) {
+                    while ($row = $result->fetch_assoc()) {  
+                        $rdvmd = $row["id"];
+                        echo "<option value='$rdvmd'>" . $row["name"] . " " . $row["familyName"] . "</option>";     
+                    }
+                } else {
+                    echo "<li>There's no doctors.</li>";
+                }
+                $conn->close();
+                ?>
+            </select>
+            <label for="appointment_description">Appointment Description:</label>
+            <textarea id="appointment_description" name="appointment_description" placeholder="write here"></textarea>
+            <label for="date">Date:</label>
+            <input type="date" name="date" value="" required></input>
+            <br>
+            <label for="time">Time:</label>
+            <input type="time" name="time" value="" required></input>
+            <br>
+        </fieldset>
+        <button type="submit" name="rendezvousbtn">Request For Appointment</button>
+    </form>
+</div>
+  <div id="notifications" class="section">
+  <h1>Mes Rendez-vous</h1>
+        <?php
+                        $conn = new mysqli($servername, $username, $password, $database);
+                        $user_id = $medecin['id'];
+                        if ($conn->connect_error) {
+                            die("La connexion à la base de données a échoué : " . $conn->connect_error);
+                        }
+                        $mesrendezvous = "SELECT * FROM rendezvous WHERE doctorid='$user_id' AND sender != '$user_id'";
+                        $resultmesrendezvous = $conn->query($mesrendezvous);
+                        if ($resultmesrendezvous->num_rows > 0) {
+                            while ($rowmesrendezvous = $resultmesrendezvous->fetch_assoc()) {
+                              echo "<span class='id'> " . htmlspecialchars($rowmesrendezvous["id"]) . "</span>";
+                              echo "<span class='doctor'> " . htmlspecialchars($rowmesrendezvous["patientid"]) . "</span>";
+                              echo "<span class='date'> " . htmlspecialchars($rowmesrendezvous["date"]) . "</span>";
+                              echo "<span class='sujet'> " . htmlspecialchars($rowmesrendezvous["sujet"]) . "</span>";
+                            }
+                        }
+                        else{ 
+                         echo"Il n'y a pas de rendez-vous."; 
+                         echo"$user_id";
+                        } ?>
+  </div>
+  <div id="settings" class="section">settings</div>
+  <div id="profile" class="section">
+    <h2>Edit Profile</h2>
+    <div class="profile-info">
+        <img src="doctor.png" alt="Profile Picture">
+        <div>
+            <h3><?= htmlspecialchars($medecin['name']) ?> <?= htmlspecialchars($medecin['familyName']) ?></h3>
+            <p>Medecin | Hope Care</p>
+            <p>Email: <?= htmlspecialchars($medecin['email']) ?></p>
+        </div>
+    </div>
+    <div class="social-icons">
+        <a href="#"><i class="fab fa-whatsapp"></i></a>
+        <a href="#"><i class="fab fa-twitter"></i></a>
+        <a href="#"><i class="fab fa-facebook"></i></a>
+        <a href="#"><i class="fab fa-instagram"></i></a>
+    </div>
+    <?php if ($error_message): ?>
+        <p style="color: red;"><?= htmlspecialchars($error_message) ?></p>
+    <?php endif; ?>
+    <form class="edit-form" id="editForm" method="post">
+        <input type="text" name="name" placeholder="Full Name" id="fullName" value="<?= htmlspecialchars($medecin['name']) ?>">
+        <input type="text" name="familyName" placeholder="Family Name" id="familyName" value="<?= htmlspecialchars($medecin['familyName']) ?>">
+        <input type="text" name="email" placeholder="Email" id="email" value="<?= htmlspecialchars($medecin['email']) ?>">
+        <input type="text" name="phoneNumber" placeholder="Phone" id="phone" value="<?= htmlspecialchars($medecin['phoneNumber']) ?>">
+        <input type="text" name="sex" placeholder="Sex" id="sex" value="<?= htmlspecialchars($medecin['sex']) ?>">
+        <input type="text" name="address" placeholder="Address" id="address" value="<?= htmlspecialchars($medecin['address']) ?>">
+        <button type="submit" name="updateprofile">Save</button>
+    </form>
+</div>
+</body>
+
+  <script>
+    const editForm = document.getElementById('editForm');
+    editForm.addEventListener('submit', function(event) {
+        // Perform validation here if needed
+    });
+    function disableButton(event) {
+        event.preventDefault(); // Empêcher le comportement par défaut du bouton
+        setTimeout(function() {
+            location.reload(); // Actualiser la page après un court délai
+        }, 1000); // Délai en millisecondes avant l'actualisation
+    }
+    document.addEventListener('DOMContentLoaded', () => {
+      const navLinks = document.querySelectorAll('.nav-link');
+      const sections = document.querySelectorAll('.section');
+
+      navLinks.forEach(link => {
+        link.addEventListener('click', (event) => {
+          event.preventDefault();
+
+          const targetSection = document.querySelector(link.getAttribute('href'));
+
+          sections.forEach(section => {
+            section.classList.remove('active');
+          });
+
+          navLinks.forEach(link => {
+            link.classList.remove('active');
+          });
+
+          link.classList.add('active');
+          targetSection.classList.add('active');
+        });
+      });
+    });
+    function ajouterMedicament() {
+            var divMedicaments = document.getElementById('medicaments');
+            var divMedicament = document.createElement('div');
+            divMedicament.className = 'medicament';
+            divMedicament.innerHTML = `
+                <label for="medicamentName">Nom du médicament :</label>
+                <input type="text" name="medicamentName[]" required>
+                <label for="dosage">Dosage :</label>
+                <input type="text" name="dosage[]" required>
+                <label for="frequence">Fréquence :</label>
+                <input type="text" name="frequence[]" required>
+                <label for="duree">Durée (jours) :</label>
+                <input type="number" name="duree[]" required>
+                <label for="remarques">Remarques :</label>
+                <input type="text" name="remarques[]">
+            `;
+            divMedicaments.appendChild(divMedicament);
+        }
+  </script>
+</body>
+</html>
